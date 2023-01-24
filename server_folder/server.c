@@ -18,72 +18,79 @@
 /*for sendfile()*/
 #include <sys/sendfile.h>
 
-int listenfd = 0, connfd = 0;
 char buf[100], command[5], filename[20], ext[20], lscommand[20]; // defining variables
-int size, i, filehandle;
+int listenfd = 0, connfd = 0;
 struct stat obj;
-int already_exits = 0;
+int size, i, filehandle;
 int overwrite_choice = 1;
+int already_exits = 0;
+
 char *pos;
 
 void putFileFromClient()
 {
-    int c = 0, len;
     char *f;
+    int c = 0, len;
 
     sscanf(buf + strlen(command), "%s", filename); // store filename in var
     i = 1;
     // check file already exits or not
-
+    printf("\nChecking if File already exist in the server or not\n");
     if (access(filename, F_OK) != -1)
     {
+        printf("\nFile already exists in the Server\n");
         already_exits = 1;
-        send(connfd, &already_exits, sizeof(int), 0); // exits
+        write(connfd, &already_exits, sizeof(int)); // exits
     }
     else
     {
+        printf("File doesn't exist in the server. Putting file in the server...\n");
         already_exits = 0;
-        send(connfd, &already_exits, sizeof(int), 0); // not exits
+        write(connfd, &already_exits, sizeof(int)); // not exits
     }
     recv(connfd, &overwrite_choice, sizeof(int), 0); // recv overwrite choice
 
     // case of overwrite
-    if (already_exits == 1 && overwrite_choice == 1)
+    if (already_exits && overwrite_choice == 1)
     {
         filehandle = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 644); // clear all the file data
-        recv(connfd, &size, sizeof(int), 0);
+        read(connfd, &size, sizeof(int));
         f = malloc(size);
-        recv(connfd, f, size, 0);         // recv full file data
-        c = write(filehandle, f, size);   // write data in file
-        close(filehandle);                // close file
-        send(connfd, &c, sizeof(int), 0); // send status
+        read(connfd, f, size);          // recv full file data
+        c = write(filehandle, f, size); // write data in file
+        close(filehandle);              // close file
+        write(connfd, &c, sizeof(int)); // send status
     }
     else if (already_exits == 0 && overwrite_choice == 1) // creating the new file
     {
         filehandle = open(filename, O_CREAT | O_EXCL | O_WRONLY, 0666); // open file
-        recv(connfd, &size, sizeof(int), 0);
+        read(connfd, &size, sizeof(int));
         f = malloc(size);
-        recv(connfd, f, size, 0);
+        read(connfd, f, size);
         c = write(filehandle, f, size);
         close(filehandle);
-        send(connfd, &c, sizeof(int), 0);
+        write(connfd, &c, sizeof(int));
     }
 }
 
 void getFileFromClient()
 {
     sscanf(buf, "%s%s", filename, filename);
-    stat(filename, &obj);
+    printf("Reading File Name..\n");
     filehandle = open(filename, O_RDONLY); // open file with read only option
+    stat(filename, &obj);
     size = obj.st_size;
     if (filehandle == -1)
         size = 0;
-    send(connfd, &size, sizeof(int), 0); // sending the size of file
-    if (size == 0)
+    write(connfd, &size, sizeof(int)); // sending the size of file
+    if (size <= 0)
         return;
-    recv(connfd, &overwrite_choice, sizeof(int), 0); // recv over write choice
+    read(connfd, &overwrite_choice, sizeof(int)); // recv over write choice
     if (size && overwrite_choice == 1)
+    {
+        printf("Sending file to the Client...\n");
         sendfile(connfd, filehandle, NULL, size); // sending the file
+    }
 }
 
 void mgetFileFromClient()
@@ -92,16 +99,17 @@ void mgetFileFromClient()
     printf("%s\n", ext);
     strcpy(lscommand, "ls *.");
     strcat(lscommand, ext);
+    printf("\nFetching all the files..\n");
     strcat(lscommand, "> filelist.txt"); // run the command and store the filelist in filelist.txt
     system(lscommand);
 
-    char *line = NULL;
     size_t len = 0;
+    char *line = NULL;
     ssize_t read;
 
     FILE *fp = fopen("filelist.txt", "r"); // open the list of files
-    int num_lines = 0;
     int ch;
+    int num_lines = 0;
     while (!feof(fp)) // count the number of files
     {
         ch = fgetc(fp);
@@ -111,24 +119,26 @@ void mgetFileFromClient()
         }
     } // end of while
 
-    // printf("%d\n",num_lines );
-    fclose(fp);                               // closing
-    fp = fopen("filelist.txt", "r");          // reopen the file list
-    send(connfd, &num_lines, sizeof(int), 0); // sending the number of files
+    printf("%d\n", num_lines);
+    fclose(fp);                             // closing
+    fp = fopen("filelist.txt", "r");        // reopen the file list
+    write(connfd, &num_lines, sizeof(int)); // sending the number of files
 
     while ((read = getline(&line, &len, fp)) != -1) // sending all files in while loop
     {
         if ((pos = strchr(line, '\n')) != NULL)
             *pos = '\0';
         strcpy(filename, line);
-        send(connfd, filename, 20, 0); // sending the command
-        stat(line, &obj);
+        write(connfd, filename, 20); // sending the command
+
         filehandle = open(line, O_RDONLY); // open the file only read choice
+        stat(line, &obj);
         size = obj.st_size;
         if (filehandle == -1)
             size = 0;
-        send(connfd, &size, sizeof(int), 0);             // send the size
+        write(connfd, &size, sizeof(int));               // send the size
         recv(connfd, &overwrite_choice, sizeof(int), 0); // recv overwrite choice
+        printf("\n");
         if (size && overwrite_choice == 1)
             sendfile(connfd, filehandle, NULL, size); // finally send the file
 
@@ -142,7 +152,7 @@ void quitServer()
 {
     printf("FTP server quitting..\n");
     i = 1;
-    send(connfd, &i, sizeof(int), 0); // closing the server
+    write(connfd, &i, sizeof(int)); // closing the server
     exit(0);
 }
 
@@ -156,15 +166,16 @@ int main(int argc, char *argv[])
     memset(&serv_addr, '0', sizeof(serv_addr));
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY); // ip address
     serv_addr.sin_port = htons(atoi(argv[1]));     // port which in input
-
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY); // ip address
+    printf("Binding...\n");
     bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-
+    printf("Binding Done...\n");
+    printf("Listening...\n");
     listen(listenfd, 10);
 
     connfd = accept(listenfd, (struct sockaddr *)NULL, NULL); // accept the connection of client
-    // printf("connected to the client\n");
+    printf("connected to the client\n");
 
     // while loop start for all opreations
     while (1)

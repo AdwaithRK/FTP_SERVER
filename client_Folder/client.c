@@ -16,18 +16,18 @@
 #include <fcntl.h>
 
 int socket_fd = 0, n = 0;
-int choice;
 char choice_str[1000];
-char filename[20], buf[100], ext[20], command[20];
-FILE *fp;
+int choice;
 int filehandle;
+char filename[20], buf[100], ext[20], command[20];
 struct stat obj;
-int size, status, i = 1;
+FILE *fp;
 char *f;
-int already_exits = 0;
+int size, status, i = 1;
 int overwirte_choice = 1;
-char *pos;
+int already_exits = 0;
 int num_lines;
+char *pos;
 
 void putInFileServer()
 {
@@ -35,17 +35,19 @@ void putInFileServer()
     scanf("%s", filename); // read the file name
     if (access(filename, F_OK) < 0)
     {
-        printf(" %s : not such file to send !!!! \n", filename);
+        printf(" %s : No such File found!!!! \n", filename);
         return;
     }
-    filehandle = open(filename, O_RDONLY);
     strcpy(buf, "put ");
+    filehandle = open(filename, O_RDONLY);
     strcat(buf, filename);
     write(socket_fd, buf, 100); // send put command with filename
+    printf("\nSending the File to Server...\n");
     read(socket_fd, &already_exits, sizeof(int));
-    if (already_exits)
+    if (already_exits != 0)
     {
-        printf("same name file already exits in server 1. overwirte 2.NO overwirte\n"); // file is already exits
+        printf("same name file already exits in server\n"); // file is already exits
+        printf("1. overwirte\n2.NO overwirte\n");
         scanf("%d", &overwirte_choice);
     }
 
@@ -54,11 +56,13 @@ void putInFileServer()
     if (overwirte_choice == 1)
     {
         stat(filename, &obj);
+        printf("\nYou have chosen to overwrite the file\n");
         size = obj.st_size;
         write(socket_fd, &size, sizeof(int));
+        printf("\nOverwriting the File into Server...\n");
         sendfile(socket_fd, filehandle, NULL, size); // sending file
         recv(socket_fd, &status, sizeof(int), 0);
-        if (status)
+        if (status != 0)
             printf("%s File stored successfully\n", filename); // status
         else
             printf("%s File failed to be stored to remote machine\n", filename);
@@ -67,14 +71,13 @@ void putInFileServer()
 
 void getInFileServer()
 {
-    printf("Enter filename to get: ");
+    printf("Enter filename to retrieve(GET) from the Server: ");
     scanf("%s", filename);
     strcpy(buf, "get ");
     strcat(buf, filename);
-
-    send(socket_fd, buf, 100, 0); // send the get command with file name
-
-    recv(socket_fd, &size, sizeof(int), 0);
+    printf("\nSending request to Server to retrieve the file\n");
+    write(socket_fd, buf, 100); // send the get command with file name
+    read(socket_fd, &size, sizeof(int));
     if (!size)
     {
         printf("No such file on the remote directory\n\n"); // file doesn't exits
@@ -83,17 +86,19 @@ void getInFileServer()
 
     if (access(filename, F_OK) != -1)
     {
+        printf("same name file already exits in Client\n"); // file is already exits
+        printf("1. overwirte\n2.NO overwirte\n");           // file already exits
         already_exits = 1;
-        printf("same name file already exits in client 1. overwirte 2.NO overwirte\n"); // file already exits
         scanf("%d", &overwirte_choice);
     }
-    send(socket_fd, &overwirte_choice, sizeof(int), 0);
+    write(socket_fd, &overwirte_choice, sizeof(int));
 
-    if (already_exits == 1 && overwirte_choice == 1)
+    if (already_exits && overwirte_choice == 1)
     {
         filehandle = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 644); // open file with all clear data
+        printf("\nYou have chosen to overwrite the file\n");
         f = malloc(size);
-        recv(socket_fd, f, size, 0);
+        read(socket_fd, f, size);
         write(filehandle, f, size);
         close(filehandle);
     }
@@ -101,7 +106,7 @@ void getInFileServer()
     {
         filehandle = open(filename, O_CREAT | O_EXCL | O_WRONLY, 0666); // open new file
         f = malloc(size);
-        recv(socket_fd, f, size, 0);
+        read(socket_fd, f, size);
         write(filehandle, f, size);
         close(filehandle);
     }
@@ -109,17 +114,18 @@ void getInFileServer()
 
 void mputInFileServer()
 {
-    printf("enter the extension , you want to put in server:\n");
+    printf("Enter the extension , you want to put in server:\n");
+    printf("\nEnter the extension without any dot at the start\n");
     scanf("%s", ext); //  take the extionsion
-
+    printf("\nFetching all the files..\n");
     strcpy(command, "ls *.");
     strcat(command, ext);
     strcat(command, " > temp.txt"); // store all file list
     // printf("%s\n",command);
     system(command);
 
-    char *line = NULL; // intilize file var
     size_t len = 0;
+    char *line = NULL; // intilize file var
     ssize_t read;
     FILE *fp = fopen("temp.txt", "r");
     while ((read = getline(&line, &len, fp)) != -1) // read input
@@ -127,26 +133,28 @@ void mputInFileServer()
         if ((pos = strchr(line, '\n')) != NULL)
             *pos = '\0';
 
-        filehandle = open(line, O_RDONLY); // open files line wise
         strcpy(buf, "put ");
+        filehandle = open(line, O_RDONLY); // open files line wise
         strcat(buf, line);
 
-        send(socket_fd, buf, 100, 0);
+        write(socket_fd, buf, 100);
         recv(socket_fd, &already_exits, sizeof(int), 0);
-        if (already_exits)
+        if (already_exits == 1)
         {
-            printf("%s file already exits in server 1. overwirte 2.NO overwirte\n", line); // overwrite option for that particular file
+            printf("same name file already exits in server\n"); // file is already exits
+            printf("1. overwirte\n2.NO overwirte\n");           // overwrite option for that particular file
             scanf("%d", &overwirte_choice);
         }
-        send(socket_fd, &overwirte_choice, sizeof(int), 0); // sending overwrite choice
+        write(socket_fd, &overwirte_choice, sizeof(int)); // sending overwrite choice
         if (overwirte_choice == 1)
         {
             stat(line, &obj);
+            printf("\nYou have chosen to overwrite the file\n");
             size = obj.st_size;
-            send(socket_fd, &size, sizeof(int), 0);
+            write(socket_fd, &size, sizeof(int));
             sendfile(socket_fd, filehandle, NULL, size);
             recv(socket_fd, &status, sizeof(int), 0);
-            if (status) // status
+            if (status != 0) // status
                 printf("%s stored successfully\n", line);
             else
                 printf("%s failed to be stored to remote machine\n", line);
@@ -160,16 +168,18 @@ void mputInFileServer()
 void mgetInFileServer()
 {
     printf("enter the extension , you want to get from server:\n");
+    printf("\nEnter the extension without any dot at the start\n");
     scanf("%s", ext); // take input the files extension
     strcpy(buf, "mget ");
     strcat(buf, ext);
-    send(socket_fd, buf, 100, 0);                // sending buffer with choice and extension
+    write(socket_fd, buf, 100);                  // sending buffer with choice and extension
     recv(socket_fd, &num_lines, sizeof(int), 0); // get number of files
 
     while (num_lines > 0)
     {
 
-        recv(socket_fd, filename, 20, 0);       // recv file name
+        recv(socket_fd, filename, 20, 0); // recv file name
+        printf("\n");
         recv(socket_fd, &size, sizeof(int), 0); // recv the size of file
         if (!size)
         {
@@ -179,13 +189,14 @@ void mgetInFileServer()
 
         if (access(filename, F_OK) != -1) // checking if already exits or not
         {
-            already_exits = 1;
+
             printf("%s file already exits in client 1. overwirte 2.NO overwirte\n", filename);
+            already_exits = 1;
             scanf("%d", &overwirte_choice); // taking overwirte choice
         }
-        send(socket_fd, &overwirte_choice, sizeof(int), 0); // sending overwrite choice
+        write(socket_fd, &overwirte_choice, sizeof(int)); // sending overwrite choice
 
-        if (already_exits == 1 && overwirte_choice == 1) // option according to the choice
+        if (already_exits && overwirte_choice == 1) // option according to the choice
         {
             filehandle = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 644); // clear all the file
             f = malloc(size);
@@ -193,7 +204,7 @@ void mgetInFileServer()
             write(filehandle, f, size); // send file
             close(filehandle);
         }
-        else if (already_exits == 0 && overwirte_choice == 1)
+        else if (!already_exits && overwirte_choice == 1)
         {
             filehandle = open(filename, O_CREAT | O_EXCL | O_WRONLY, 0666); // open new file
             f = malloc(size);
@@ -201,20 +212,21 @@ void mgetInFileServer()
             write(filehandle, f, size);
             close(filehandle);
         }
-        overwirte_choice = 1;
-        already_exits = 0;
         num_lines--;
+        already_exits = 0;
+        overwirte_choice = 1;
     }
 }
 
 void removeConnection()
 {
     strcpy(buf, "quit");
-    send(socket_fd, buf, 100, 0); // sending quit command for closing both server and client
+    write(socket_fd, buf, 100); // sending quit command for closing both server and client
     recv(socket_fd, &status, 100, 0);
-    if (status)
+    if (status != 0)
     {
-        printf("Server closed\nQuitting..\n");
+        printf("Server closed\n");
+        printf("\nQuitting...\n");
         exit(0);
     }
     printf("Server failed to close connection\n"); // faild to quit
@@ -228,8 +240,8 @@ int main(int argc, char *argv[])
 
     if (argc != 3)
     {
-        // printf("\n Usage: %s <ip of server> \n", argv[0]); // checking argument
         printf("\n proper ip and port required!!!\n");
+        printf("\n Usage: %s <ip of server> \n", argv[0]); // checking argument
         return 1;
     }
 
@@ -237,7 +249,7 @@ int main(int argc, char *argv[])
     if ((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
         printf("\n Client socket creation failed \n"); // socket create
-        return 1;
+        return 0;
     }
 
     // memset(&server_address, '0', sizeof(server_address)); // assigning  server address
@@ -248,7 +260,7 @@ int main(int argc, char *argv[])
     if (inet_pton(AF_INET, argv[1], &server_address.sin_addr) <= 0)
     {
         printf("\n inet_pton error occured\n");
-        return 1;
+        return 0;
     }
 
     if (connect(socket_fd, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) // connect to the server
