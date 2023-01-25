@@ -31,7 +31,8 @@ void putFileFromClient()
 {
     char *f;
     int c = 0, len;
-
+    // stlen is used here as offset
+    // sscanf stores the filename from the buf into filename
     sscanf(buf + strlen(command), "%s", filename); // store filename in var
     i = 1;
     // check file already exits or not
@@ -48,13 +49,17 @@ void putFileFromClient()
         already_exits = 0;
         write(connfd, &already_exits, sizeof(int)); // not exits
     }
+    // it receives the command to either overwrite or not
     recv(connfd, &overwrite_choice, sizeof(int), 0); // recv overwrite choice
 
     // case of overwrite
     if (already_exits && overwrite_choice == 1)
     {
+        // As the file already existis clear all the data
         filehandle = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 644); // clear all the file data
+        // recevies the file size from client
         read(connfd, &size, sizeof(int));
+        // Allocating the buffer for reading the file
         f = malloc(size);
         read(connfd, f, size);          // recv full file data
         c = write(filehandle, f, size); // write data in file
@@ -78,9 +83,9 @@ void getFileFromClient()
     sscanf(buf, "%s%s", filename, filename);
     printf("Reading File Name..\n");
     filehandle = open(filename, O_RDONLY); // open file with read only option
-    stat(filename, &obj);
+    stat(filename, &obj);                  // details of the file
     size = obj.st_size;
-    if (filehandle == -1)
+    if (filehandle == -1) // if file doesnt exist
         size = 0;
     write(connfd, &size, sizeof(int)); // sending the size of file
     if (size <= 0)

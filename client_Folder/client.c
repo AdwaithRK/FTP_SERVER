@@ -32,17 +32,18 @@ char *pos;
 void putInFileServer()
 {
     printf("enter the filename to put in server\n");
-    scanf("%s", filename); // read the file name
-    if (access(filename, F_OK) < 0)
+    scanf("%s", filename);          // read the file name
+    if (access(filename, F_OK) < 0) // checking if a file exists in the local directory or not
     {
         printf(" %s : No such File found!!!! \n", filename);
         return;
     }
-    strcpy(buf, "put ");
-    filehandle = open(filename, O_RDONLY);
+    strcpy(buf, "put ");                   // copying the command
+    filehandle = open(filename, O_RDONLY); // open the file in read only mode
     strcat(buf, filename);
     write(socket_fd, buf, 100); // send put command with filename
     printf("\nSending the File to Server...\n");
+    // reading the status if the file already exists in the server or not
     read(socket_fd, &already_exits, sizeof(int));
     if (already_exits != 0)
     {
@@ -50,18 +51,20 @@ void putInFileServer()
         printf("1. overwirte\n2.NO overwirte\n");
         scanf("%d", &overwirte_choice);
     }
-
+    // by default we overwrite the file
     write(socket_fd, &overwirte_choice, sizeof(int)); // sending overwrite choice
 
     if (overwirte_choice == 1)
     {
+        // stat to find the deatils like size, mode of the file
         stat(filename, &obj);
-        printf("\nYou have chosen to overwrite the file\n");
+        printf("\nWriting the file to server\n");
         size = obj.st_size;
+        // sending the size of the file to the server
         write(socket_fd, &size, sizeof(int));
         printf("\nOverwriting the File into Server...\n");
         sendfile(socket_fd, filehandle, NULL, size); // sending file
-        recv(socket_fd, &status, sizeof(int), 0);
+        read(socket_fd, &status, sizeof(int));       // receiving the status
         if (status != 0)
             printf("%s File stored successfully\n", filename); // status
         else
@@ -76,21 +79,22 @@ void getInFileServer()
     strcpy(buf, "get ");
     strcat(buf, filename);
     printf("\nSending request to Server to retrieve the file\n");
-    write(socket_fd, buf, 100); // send the get command with file name
-    read(socket_fd, &size, sizeof(int));
+    write(socket_fd, buf, 100);          // send the get command with file name
+    read(socket_fd, &size, sizeof(int)); // receving the size of the file
     if (!size)
     {
         printf("No such file on the remote directory\n\n"); // file doesn't exits
         return;
     }
 
-    if (access(filename, F_OK) != -1)
+    if (access(filename, F_OK) != -1) // checking existence of file at client side
     {
         printf("same name file already exits in Client\n"); // file is already exits
         printf("1. overwirte\n2.NO overwirte\n");           // file already exits
         already_exits = 1;
         scanf("%d", &overwirte_choice);
     }
+    // send the overwrite choice by default 1
     write(socket_fd, &overwirte_choice, sizeof(int));
 
     if (already_exits && overwirte_choice == 1)
@@ -120,7 +124,7 @@ void mputInFileServer()
     printf("\nFetching all the files..\n");
     strcpy(command, "ls *.");
     strcat(command, ext);
-    strcat(command, " > temp.txt"); // store all file list
+    strcat(command, " > temp.txt"); // store all file list in temp.txt
     // printf("%s\n",command);
     system(command);
 
@@ -130,6 +134,7 @@ void mputInFileServer()
     FILE *fp = fopen("temp.txt", "r");
     while ((read = getline(&line, &len, fp)) != -1) // read input
     {
+        // removing the \n charater and replace with null character to make the file name string
         if ((pos = strchr(line, '\n')) != NULL)
             *pos = '\0';
 
@@ -268,8 +273,6 @@ int main(int argc, char *argv[])
         printf("\n Can't connect with server!!! \n");
         return 1;
     }
-
-    printf("here here");
 
     while (1)
     {
